@@ -207,6 +207,100 @@ class FilesController {
 
     return res.status(200).send(paginationArray);
   }
+
+  static async putPublish(req, res) {
+    async function getIdKey(req) {
+      const userInfo = { userId: null, key: null };
+
+      const token = req.header('X-Token');
+      if (!token) return userInfo;
+
+      userInfo.key = `auth_${token}`;
+      userInfo.userId = await redisClient.get(userInfo.key);
+
+      return userInfo;
+    }
+
+    const { userId } = await getIdKey(req);
+
+    function isValidUser(id) {
+      try {
+        ObjectId(id);
+      } catch (error) {
+        return false;
+      }
+      return true;
+    }
+
+    if (!isValidUser(userId)) return res.status(401).send({ error: 'Unauthorized' });
+
+    const user = await dbClient.users.findOne({ _id: ObjectId(userId) });
+    if (!user) return res.status(401).send({ error: 'Unauthorized' });
+
+    const idFile = req.params.id || '';
+
+    let file = await dbClient.users.findOne({ _id: ObjectId(idFile), userId: user._id });
+    if (!file) return res.status(404).send({ error: 'Not found' });
+
+    await dbClient.files.updateOne({ _id: ObjectId(idFile) }, { $set: { isPublic: true } });
+    file = await dbClient.files.findOne({ _id: ObjectId(idFile), userId: user._id });
+
+    return res.status(200).send({
+      id: file._id,
+      userId: file.userId,
+      name: file.name,
+      type: file.type,
+      isPublic: file.isPublic,
+      parentId: file.parentId,
+    });
+  }
+
+  static async putUnpublish(req, res) {
+    async function getIdKey(req) {
+      const userInfo = { userId: null, key: null };
+
+      const token = req.header('X-Token');
+      if (!token) return userInfo;
+
+      userInfo.key = `auth_${token}`;
+      userInfo.userId = await redisClient.get(userInfo.key);
+
+      return userInfo;
+    }
+
+    const { userId } = await getIdKey(req);
+
+    function isValidUser(id) {
+      try {
+        ObjectId(id);
+      } catch (error) {
+        return false;
+      }
+      return true;
+    }
+
+    if (!isValidUser(userId)) return res.status(401).send({ error: 'Unauthorized' });
+
+    const user = await dbClient.users.findOne({ _id: ObjectId(userId) });
+    if (!user) return res.status(401).send({ error: 'Unauthorized' });
+
+    const idFile = req.params.id || '';
+
+    let file = await dbClient.users.findOne({ _id: ObjectId(idFile), userId: user._id });
+    if (!file) return res.status(404).send({ error: 'Not found' });
+
+    await dbClient.files.updateOne({ _id: ObjectId(idFile) }, { $set: { isPublic: false } });
+    file = await dbClient.files.findOne({ _id: ObjectId(idFile), userId: user._id });
+
+    return res.status(200).send({
+      id: file._id,
+      userId: file.userId,
+      name: file.name,
+      type: file.type,
+      isPublic: file.isPublic,
+      parentId: file.parentId,
+    });
+  }
 }
 
 export default FilesController;
