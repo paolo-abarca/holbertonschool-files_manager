@@ -1,7 +1,10 @@
 import sha1 from 'sha1';
+import Queue from 'bull';
 import { ObjectId } from 'mongodb';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
+
+const userQ = new Queue('userQ');
 
 class UsersController {
   static async postNew(req, res) {
@@ -23,6 +26,10 @@ class UsersController {
       id: insertStat.insertedId,
       email,
     };
+
+    await userQ.add({
+      userId: insertStat.insertedId.toString(),
+    });
 
     return res.status(201).send(createdUser);
   }
