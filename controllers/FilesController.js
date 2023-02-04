@@ -1,12 +1,14 @@
 import { ObjectId } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import { mkdir, writeFile, readFileSync } from 'fs';
+import Queue from 'bull';
 import mime from 'mime-types';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 
 class FilesController {
   static async postUpload(req, res) {
+    const fileQ = new Queue('fileQ');
     const dir = process.env.FOLDER_PATH || '/tmp/files_manager';
 
     async function getIdKey(req) {
@@ -93,6 +95,11 @@ class FilesController {
     fileInsertData.localPath = filePath;
     await dbClient.files.insertOne(fileInsertData);
 
+    fileQ.add({
+      userId: fileInsertData.userId,
+      fileId: fileInsertData._id,
+    });
+
     return res.status(201).send({
       id: fileInsertData._id,
       userId: fileInsertData.userId,
@@ -132,7 +139,7 @@ class FilesController {
     const user = await dbClient.users.findOne({ _id: ObjectId(userId) });
     if (!user) return res.status(401).send({ error: 'Unauthorized' });
 
-    const argId = req.params.id;
+    const argId = req.params.id || '';
     const file = await dbClient.users.findOne({ _id: ObjectId(argId), userId: user._id });
     if (!file) return res.status(404).send({ error: 'Not found' });
 
@@ -240,7 +247,7 @@ class FilesController {
 
     const idFile = req.params.id || '';
 
-    let file = await dbClient.users.findOne({ _id: ObjectId(idFile), userId: user._id });
+    let file = await dbClient.files.findOne({ _id: ObjectId(idFile), userId: user._id });
     if (!file) return res.status(404).send({ error: 'Not found' });
 
     await dbClient.files.updateOne({ _id: ObjectId(idFile) }, { $set: { isPublic: true } });
@@ -287,7 +294,7 @@ class FilesController {
 
     const idFile = req.params.id || '';
 
-    let file = await dbClient.users.findOne({ _id: ObjectId(idFile), userId: user._id });
+    let file = await dbClient.files.findOne({ _id: ObjectId(idFile), userId: user._id });
     if (!file) return res.status(404).send({ error: 'Not found' });
 
     await dbClient.files.updateOne({ _id: ObjectId(idFile) }, { $set: { isPublic: false } });
@@ -307,7 +314,7 @@ class FilesController {
     const idFile = req.params.id || '';
     const size = req.query.size || 0;
 
-    const file = await dbClient.users.findOne({ _id: ObjectId(idFile) });
+    const file = await dbClient.files.findOne({ _id: ObjectId(idFile) });
     if (!file) return res.status(404).send({ error: 'Not found' });
 
     const { isPublic, userId, type } = file;
@@ -327,7 +334,7 @@ class FilesController {
     const { userId: user } = await getIdKey(req);
 
     if ((!isPublic && !user) || (user && userId.toString() !== user && !isPublic)) return res.status(404).send({ error: 'Not found' });
-    if (['folder'].includes(type)) return res.status(400).send({ error: 'A folder doesn\'t have content' });
+    if (type === 'folder') return res.status(400).send({ error: 'A folder doesn\'t have content' });
 
     const realPath = size === 0 ? file.localPath : `${file.localPath}_${size}`;
 
@@ -337,7 +344,7 @@ class FilesController {
       const mimeType = mime.contentType(file.name);
       res.setHeader('Content-type', mimeType);
       return res.status(200).send(fileData);
-    } catch (error) {
+    } catch (err) {
       return res.status(404).send({ error: 'Not found' });
     }
   }
