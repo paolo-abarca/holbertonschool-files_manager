@@ -36,7 +36,7 @@ function controllerRouting(app) {
     FilesController.postUpload(req, res);
   });
 
-  router.get('/files:id', (req, res) => {
+  router.get('/files/:id', (req, res) => {
     FilesController.getShow(req, res);
   });
 
